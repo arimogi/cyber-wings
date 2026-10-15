@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Side Scrolling Air Combat</title>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #87CEEB;
+            font-family: Arial, sans-serif;
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(#66b3ff, #cceeff);
+        }
+
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+            text-shadow: 1px 1px 3px black;
+        }
+
+        #info {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            color: white;
+            text-shadow: 1px 1px 3px black;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="hud"></div>
+    <div id="info">
+        ↑↓←→ Gerak |
+        CTRL Tembak |
+        SPACE Bom
+    </div>
+
+    <canvas id="game"></canvas>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener("resize", resize);
+
+        const hud = document.getElementById("hud");
+
+        const keys = {};
+
+        document.addEventListener("keydown", (e) => {
+            keys[e.code] = true;
+
+            if (e.code === "ControlLeft" || e.code === "ControlRight") {
+                shoot();
+            }
+
+            if (e.code === "Space") {
+                e.preventDefault();
+                dropBomb();
+            }
+        });
+
+        document.addEventListener("keyup", (e) => {
+            keys[e.code] = false;
+        });
+
+        const player = {
+            x: 120,
+            y: 300,
+            w: 60,
+            h: 30,
+            speed: 6,
+            lives: 3,
+            bombs: 3
+        };
+
+        let bullets = [];
+        let enemies = [];
+        let bonuses = [];
+        let explosions = [];
+
+        let score = 0;
+        let gameOver = false;
+
+        const gameStart = Date.now();
+
+        function shoot() {
+            if (gameOver) return;
+
+            bullets.push({
+                x: player.x + player.w,
+                y: player.y + player.h / 2,
+                w: 15,
+                h: 4,
+                speed: 12
+            });
+        }
+
+        function dropBomb() {
+            if (gameOver) return;
+
+            if (player.bombs <= 0) return;
+
+            player.bombs--;
+
+            score += enemies.length * 10;
+
+            enemies.forEach(e => {
+                explosions.push({
+                    x: e.x,
+                    y: e.y,
+                    life: 30
+                });
+            });
+
+            enemies = [];
+        }
+
+        function createEnemy() {
+
+            const r = Math.random();
+
+            let type;
+
+            if (r < 0.5) {
+                type = {
+                    size: "small",
+                    w: 40,
+                    h: 20,
+                    hp: 1,
+                    score: 10
+                };
+            }
+            else if (r < 0.85) {
+                type = {
+                    size: "medium",
+                    w: 70,
+                    h: 35,
+                    hp: 2,
+                    score: 20
+                };
+            }
+            else {
+                type = {
+                    size: "large",
+                    w: 110,
+                    h: 55,
+                    hp: 4,
+                    score: 40
+                };
+            }
+
+            const minutes =
+                (Date.now() - gameStart) / 60000;
+
+            const speedIncrease = Math.floor(minutes) * 0.2;
+
+            enemies.push({
+                x: canvas.width + type.w,
+                y: Math.random() *
+                    (canvas.height - type.h),
+                ...type,
+                speed: 3 + speedIncrease +
+                    Math.random() * 2
+            });
+        }
+
+        function createBonus() {
+
+            bonuses.push({
+                x: canvas.width,
+                y: Math.random() *
+                    (canvas.height - 30),
+                w: 30,
+                h: 30,
+                speed: 3
+            });
+        }
+
+        setInterval(createEnemy, 900);
+        setInterval(createBonus, 15000);
+
+        function rect(a, b) {
+            return (
+                a.x < b.x + b.w &&
+                a.x + a.w > b.x &&
+                a.y < b.y + b.h &&
+                a.y + a.h > b.y
+            );
+        }
+
+        function updatePlayer() {
+
+            player.x += 1.5;
+
+            if (keys["ArrowUp"])
+                player.y -= player.speed;
+
+            if (keys["ArrowDown"])
+                player.y += player.speed;
+
+            if (keys["ArrowLeft"])
+                player.x -= player.speed;
+
+            if (keys["ArrowRight"])
+                player.x += player.speed;
+
+            player.x = Math.max(
+                0,
+                Math.min(canvas.width - player.w,
+                    player.x)
+            );
+
+            player.y = Math.max(
+                0,
+                Math.min(canvas.height - player.h,
+                    player.y)
+            );
+        }
+
+        function update() {
+
+            if (gameOver) return;
+
+            updatePlayer();
+
+            bullets.forEach(b => {
+                b.x += b.speed;
+            });
+
+            bullets = bullets.filter(
+                b => b.x < canvas.width
+            );
+
+            enemies.forEach(enemy => {
+
+                enemy.x -= enemy.speed;
+
+                if (rect(player, enemy)) {
+
+                    player.lives--;
+
+                    explosions.push({
+                        x: enemy.x,
+                        y: enemy.y,
+                        life: 25
+                    });
+
+                    enemy.dead = true;
+
+                    if (player.lives <= 0) {
+                        gameOver = true;
+                    }
+                }
+
+                if (enemy.x + enemy.w < 0) {
+                    enemy.dead = true;
+                }
+            });
+
+            bullets.forEach(bullet => {
+
+                enemies.forEach(enemy => {
+
+                    if (rect(bullet, enemy)) {
+
+                        enemy.hp--;
+                        bullet.dead = true;
+
+                        if (enemy.hp <= 0) {
+
+                            score += enemy.score;
+
+                            explosions.push({
+                                x: enemy.x,
+                                y: enemy.y,
+                                life: 30
+                            });
+
+                            enemy.dead = true;
+                        }
+                    }
+                });
+            });
+
+            bonuses.forEach(b => {
+                b.x -= b.speed;
+
+                if (rect(player, b)) {
+                    player.lives++;
+                    b.dead = true;
+                }
+            });
+
+            enemies = enemies.filter(
+                e => !e.dead
+            );
+
+            bullets = bullets.filter(
+                b => !b.dead
+            );
+
+            bonuses = bonuses.filter(
+                b => !b.dead
+            );
+
+            explosions.forEach(e => {
+                e.life--;
+            });
+
+            explosions =
+                explosions.filter(e => e.life > 0);
+
+            const elapsedMinutes =
+                Math.floor(
+                    (Date.now() - gameStart) / 60000
+                );
+
+            hud.innerHTML =
+                `Skor: ${score}
+         | Nyawa: ${player.lives}
+         | Bom: ${player.bombs}
+         | Level Kecepatan: +${(elapsedMinutes * 0.2).toFixed(1)}`;
+        }
+
+        function drawPlayer() {
+
+            ctx.fillStyle = "#0033cc";
+
+            ctx.beginPath();
+            ctx.moveTo(
+                player.x,
+                player.y + player.h / 2
+            );
+            ctx.lineTo(
+                player.x + player.w,
+                player.y
+            );
+            ctx.lineTo(
+                player.x + player.w,
+                player.y + player.h
+            );
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "orange";
+            ctx.fillRect(
+                player.x - 10,
+                player.y + 10,
+                10,
+                10
+            );
+        }
+
+        function drawEnemies() {
+
+            enemies.forEach(e => {
+
+                if (e.size === "small")
+                    ctx.fillStyle = "red";
+                else if (e.size === "medium")
+                    ctx.fillStyle = "darkred";
+                else
+                    ctx.fillStyle = "purple";
+
+                ctx.fillRect(
+                    e.x, e.y, e.w, e.h
+                );
+
+                ctx.fillStyle = "white";
+                ctx.fillRect(
+                    e.x + 5,
+                    e.y + 5,
+                    e.w - 10,
+                    4
+                );
+            });
+        }
+
+        function drawBullets() {
+
+            ctx.fillStyle = "yellow";
+
+            bullets.forEach(b => {
+                ctx.fillRect(
+                    b.x, b.y, b.w, b.h
+                );
+            });
+        }
+
+        function drawBonuses() {
+
+            bonuses.forEach(b => {
+
+                ctx.fillStyle = "lime";
+                ctx.beginPath();
+                ctx.arc(
+                    b.x + 15,
+                    b.y + 15,
+                    15,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+
+                ctx.fillStyle = "white";
+
+                ctx.fillRect(
+                    b.x + 13,
+                    b.y + 5,
+                    4,
+                    20
+                );
+
+                ctx.fillRect(
+                    b.x + 5,
+                    b.y + 13,
+                    20,
+                    4
+                );
+            });
+        }
+
+        function drawExplosions() {
+
+            explosions.forEach(e => {
+
+                ctx.fillStyle =
+                    `rgba(255,120,0,
+        ${e.life / 30})`;
+
+                ctx.beginPath();
+                ctx.arc(
+                    e.x,
+                    e.y,
+                    (30 - e.life) + 10,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            });
+        }
+
+        function drawBackground() {
+
+            for (let i = 0; i < 20; i++) {
+
+                ctx.fillStyle = "white";
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    (i * 250 - Date.now() / 40)
+                    % (canvas.width + 300),
+                    70 + (i % 5) * 80,
+                    20,
+                    0,
+                    Math.PI * 2
+                );
+
+                ctx.fill();
+            }
+        }
+
+        function render() {
+
+            ctx.clearRect(
+                0, 0,
+                canvas.width,
+                canvas.height
+            );
+
+            drawBackground();
+            drawPlayer();
+            drawBullets();
+            drawEnemies();
+            drawBonuses();
+            drawExplosions();
+
+            if (gameOver) {
+
+                ctx.fillStyle =
+                    "rgba(0,0,0,0.6)";
+
+                ctx.fillRect(
+                    0, 0,
+                    canvas.width,
+                    canvas.height
+                );
+
+                ctx.fillStyle = "white";
+                ctx.font = "60px Arial";
+                ctx.textAlign = "center";
+
+                ctx.fillText(
+                    "GAME OVER",
+                    canvas.width / 2,
+                    canvas.height / 2
+                );
+
+                ctx.font = "30px Arial";
+
+                ctx.fillText(
+                    "Skor: " + score,
+                    canvas.width / 2,
+                    canvas.height / 2 + 50
+                );
+            }
+        }
+
+        function loop() {
+
+            update();
+            render();
+
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+
+</body>
+
+</html>
